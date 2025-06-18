@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: immich-library-pvc
+  name: immich-server-library
   namespace: immich
   labels:
     app: immich
@@ -20,7 +20,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: immich-uploads-pvc
+  name: immich-server-uploads
   namespace: immich
   labels:
     app: immich
