@@ -1,0 +1,20 @@
+immich:
+  image:
+    repository: ghcr.io/immich-app/immich-server
+    tag: "v1.134.0" # Check for the latest stable version
+
+  postgresql:
+    enabled: true
+    postgresqlUsername: immich
+    postgresqlDatabase: immich
+
+  redis:
+    enabled: true
+
+  ingress:
+    enabled: true
+    hosts:
+      - host: immich.local
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
