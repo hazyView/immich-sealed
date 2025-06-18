@@ -1,3 +1,4 @@
+# Values for the Immich Helm chart dependency
 immich:
   image:
     repository: ghcr.io/immich-app/immich-server
@@ -5,16 +6,18 @@ immich:
 
   postgresql:
     enabled: true
-    postgresqlUsername: immich
-    postgresqlDatabase: immich
+    auth:
+      username: immich
+      database: immich
 
   redis:
     enabled: true
 
   ingress:
-    enabled: true
-    hosts:
-      - host: immich.local
-        paths:
-          - path: /
-            pathType: ImplementationSpecific
+    main:
+      enabled: true
+      hosts:
+        - host: immich.local
+          paths:
+            - path: /
+              pathType: ImplementationSpecific
