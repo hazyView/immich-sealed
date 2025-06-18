@@ -26,6 +26,7 @@ spec:
             DB_HOSTNAME: "immich-postgresql"
             DB_DATABASE_NAME: "immich"
             DB_USERNAME: "immich"
+            # Remove DB_PASSWORD since we'll use existingSecret
 
           persistence:
             library:
@@ -44,6 +45,8 @@ spec:
 
           postgresql:
             enabled: true
+            nameOverride: "postgresql"
+            fullnameOverride: "immich-postgresql"
             auth:
               username: immich
               database: immich
@@ -51,21 +54,26 @@ spec:
               persistence:
                 enabled: true
                 size: 20Gi
-            # Override service naming for consistent DNS
-            nameOverride: "postgresql"
-            fullnameOverride: "immich-postgresql"
+            # Ensure service is created
+            service:
+              ports:
+                postgresql: 5432
 
           redis:
             enabled: true
+            nameOverride: "redis"  
+            fullnameOverride: "immich-redis"
             auth:
               enabled: false
+            architecture: standalone
             master:
               persistence:
                 enabled: true
                 size: 8Gi
-            # Override service naming for consistent DNS
-            nameOverride: "redis"
-            fullnameOverride: "immich-redis"
+            # Ensure service is created  
+            service:
+              ports:
+                redis: 6379
 
           ingress:
             main:
