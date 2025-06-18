@@ -8,11 +8,20 @@ immich:
   # Persistence configuration for Immich
   persistence:
     library:
-      enabled: false
+      enabled: true
+      type: pvc
+      existingClaim: "immich-server-library"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 100Gi
     
-    # Additional persistence volumes that might be needed
     uploads:
-      enabled: false
+      enabled: true
+      type: pvc
+      existingClaim: "immich-server-uploads"
+      subPath: ""
+      accessMode: ReadWriteOnce
+      size: 50Gi
 
   postgresql:
     enabled: true

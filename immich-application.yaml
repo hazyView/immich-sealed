@@ -6,12 +6,57 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/hazyView/immich-sealed.git # Replace with your repository URL
-    targetRevision: HEAD
-    path: apps/immich
+    repoURL: https://immich-app.github.io/immich-charts
+    targetRevision: "0.7.2"
+    chart: immich
     helm:
-      valueFiles:
-        - values.yaml
+      values: |
+        image:
+          repository: ghcr.io/immich-app/immich-server
+          tag: "v1.134.0"
+
+        persistence:
+          library:
+            enabled: true
+            type: pvc
+            existingClaim: "immich-server-library"
+            accessMode: ReadWriteOnce
+            size: 100Gi
+          
+          uploads:
+            enabled: true
+            type: pvc
+            existingClaim: "immich-server-uploads"
+            accessMode: ReadWriteOnce
+            size: 50Gi
+
+        postgresql:
+          enabled: true
+          auth:
+            username: immich
+            database: immich
+          primary:
+            persistence:
+              enabled: true
+              size: 20Gi
+
+        redis:
+          enabled: true
+          auth:
+            enabled: false
+          master:
+            persistence:
+              enabled: true
+              size: 8Gi
+
+        ingress:
+          main:
+            enabled: true
+            hosts:
+              - host: immich.local
+                paths:
+                  - path: /
+                    pathType: ImplementationSpecific
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: immich
