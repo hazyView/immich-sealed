@@ -8,19 +8,16 @@ immich:
   persistence:
     library:
       enabled: true
-      #Testing use
-      #type: emptyDir # Use emptyDir for testing, change to pvc for production
-      # For production, use:
       type: pvc
       size: 100Gi
-      existingClaim: "immich-library-pvc"
+      # storageClass: "" # Use default storage class
     
     # Additional persistence volumes that might be needed
     uploads:
       enabled: true
       type: pvc
       size: 50Gi
-      existingClaim: "immich-uploads-pvc"
+      # storageClass: "" # Use default storage class
 
   postgresql:
     enabled: true
