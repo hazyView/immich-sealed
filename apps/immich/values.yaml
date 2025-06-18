@@ -10,6 +10,7 @@ immich:
       enabled: true
       type: pvc
       size: 100Gi
+      accessMode: ReadWriteOnce
       # storageClass: "" # Use default storage class
     
     # Additional persistence volumes that might be needed
@@ -17,6 +18,7 @@ immich:
       enabled: true
       type: pvc
       size: 50Gi
+      accessMode: ReadWriteOnce
       # storageClass: "" # Use default storage class
 
   postgresql:
