@@ -1,4 +1,5 @@
 # Values for the Immich Helm chart dependency
+# Note: These values are passed to the immich subchart
 immich:
   image:
     repository: ghcr.io/immich-app/immich-server
@@ -7,13 +8,11 @@ immich:
   # Persistence configuration for Immich
   persistence:
     library:
-      enabled: true
-      existingClaim: "immich-server-library"
+      enabled: false
     
     # Additional persistence volumes that might be needed
     uploads:
-      enabled: true
-      existingClaim: "immich-server-uploads"
+      enabled: false
 
   postgresql:
     enabled: true
