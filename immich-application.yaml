@@ -16,6 +16,17 @@ spec:
             repository: ghcr.io/immich-app/immich-server
             tag: "v1.134.0"
 
+          # Set replica count to 1 for Immich server
+          server:
+            replicaCount: 1
+
+          # Environment variables to override service discovery
+          env:
+            REDIS_HOSTNAME: "immich-redis-master"
+            DB_HOSTNAME: "immich-postgresql"
+            DB_DATABASE_NAME: "immich"
+            DB_USERNAME: "immich"
+
           persistence:
             library:
               enabled: true
@@ -40,6 +51,9 @@ spec:
               persistence:
                 enabled: true
                 size: 20Gi
+            # Override service naming for consistent DNS
+            nameOverride: "postgresql"
+            fullnameOverride: "immich-postgresql"
 
           redis:
             enabled: true
@@ -49,6 +63,9 @@ spec:
               persistence:
                 enabled: true
                 size: 8Gi
+            # Override service naming for consistent DNS
+            nameOverride: "redis"
+            fullnameOverride: "immich-redis"
 
           ingress:
             main:
