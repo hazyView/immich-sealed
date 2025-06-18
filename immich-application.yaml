@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/hazyView/immich-sealed.git' # Replace with your repository URL
+    repoURL: https://github.com/hazyView/immich-sealed.git # Replace with your repository URL
     targetRevision: HEAD
     path: apps/immich
     helm:
