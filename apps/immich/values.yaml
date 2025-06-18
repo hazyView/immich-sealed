@@ -4,14 +4,45 @@ immich:
     repository: ghcr.io/immich-app/immich-server
     tag: "v1.134.0" # Check for the latest stable version
 
+  # Persistence configuration for Immich
+  persistence:
+    library:
+      enabled: true
+      #Testing use
+      #type: emptyDir # Use emptyDir for testing, change to pvc for production
+      # For production, use:
+      type: pvc
+      size: 100Gi
+      existingClaim: "immich-library-pvc"
+    
+    # Additional persistence volumes that might be needed
+    uploads:
+      enabled: true
+      type: pvc
+      size: 50Gi
+      existingClaim: "immich-uploads-pvc"
+
   postgresql:
     enabled: true
     auth:
       username: immich
       database: immich
+      # You might want to set a password or use existing secret
+      # password: "your-password"
+      # existingSecret: "immich-postgres-secret"
+    primary:
+      persistence:
+        enabled: true
+        size: 20Gi
 
   redis:
     enabled: true
+    auth:
+      enabled: false # Set to true for production
+    master:
+      persistence:
+        enabled: true
+        size: 8Gi
 
   ingress:
     main:
