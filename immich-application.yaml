@@ -11,52 +11,53 @@ spec:
     chart: immich
     helm:
       values: |
-        image:
-          repository: ghcr.io/immich-app/immich-server
-          tag: "v1.134.0"
+        immich:
+          image:
+            repository: ghcr.io/immich-app/immich-server
+            tag: "v1.134.0"
 
-        persistence:
-          library:
-            enabled: true
-            type: pvc
-            existingClaim: "immich-server-library"
-            accessMode: ReadWriteOnce
-            size: 100Gi
-          
-          uploads:
-            enabled: true
-            type: pvc
-            existingClaim: "immich-server-uploads"
-            accessMode: ReadWriteOnce
-            size: 50Gi
-
-        postgresql:
-          enabled: true
-          auth:
-            username: immich
-            database: immich
-          primary:
-            persistence:
+          persistence:
+            library:
               enabled: true
-              size: 20Gi
-
-        redis:
-          enabled: true
-          auth:
-            enabled: false
-          master:
-            persistence:
+              type: pvc
+              existingClaim: "immich-server-library"
+              accessMode: ReadWriteOnce
+              size: 100Gi
+            
+            uploads:
               enabled: true
-              size: 8Gi
+              type: pvc
+              existingClaim: "immich-server-uploads"
+              accessMode: ReadWriteOnce
+              size: 50Gi
 
-        ingress:
-          main:
+          postgresql:
             enabled: true
-            hosts:
-              - host: immich.local
-                paths:
-                  - path: /
-                    pathType: ImplementationSpecific
+            auth:
+              username: immich
+              database: immich
+            primary:
+              persistence:
+                enabled: true
+                size: 20Gi
+
+          redis:
+            enabled: true
+            auth:
+              enabled: false
+            master:
+              persistence:
+                enabled: true
+                size: 8Gi
+
+          ingress:
+            main:
+              enabled: true
+              hosts:
+                - host: immich.local
+                  paths:
+                    - path: /
+                      pathType: ImplementationSpecific
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: immich
