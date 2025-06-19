@@ -1,0 +1,62 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to base configuration
+resources:
+  - ../../base
+
+# Override namespace for development
+namespace: immich-dev
+
+# Development-specific labels
+labels:
+  - pairs:
+      environment: development
+
+# Patches for development environment
+patches:
+  # Reduce resource requirements for development
+  - target:
+      kind: StatefulSet
+      name: immich-postgresql-pgvector
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+  
+  # Reduce PVC sizes for development
+  - target:
+      kind: PersistentVolumeClaim
+      name: immich-server-library
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "10Gi"
+  
+  - target:
+      kind: PersistentVolumeClaim
+      name: immich-server-uploads
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "5Gi"
+
+# ConfigMap overrides for development
+configMapGenerator:
+  - name: immich-config
+    behavior: merge
+    literals:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+      - IMMICH_LOG_LEVEL=debug
+
+# Images for development (can use different tags)
+images:
+  - name: ghcr.io/immich-app/immich-server
+    newTag: latest

@@ -1,0 +1,75 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to base configuration
+resources:
+  - ../../base
+
+# Production namespace
+namespace: immich
+
+# Production-specific labels
+labels:
+  - pairs:
+      environment: production
+
+# Production-specific annotations
+commonAnnotations:
+  environment: production
+  backup.kubernetes.io/enabled: "true"
+
+# Patches for production environment
+patches:
+  # Production resource requirements
+  - target:
+      kind: StatefulSet
+      name: immich-postgresql-pgvector
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+  
+  # Enable backup annotations for PVCs
+  - target:
+      kind: PersistentVolumeClaim
+      name: immich-server-library
+    patch: |-
+      - op: add
+        path: /metadata/annotations/backup.kubernetes.io~1enabled
+        value: "true"
+  
+  - target:
+      kind: PersistentVolumeClaim
+      name: immich-server-uploads
+    patch: |-
+      - op: add
+        path: /metadata/annotations/backup.kubernetes.io~1enabled
+        value: "true"
+
+# ConfigMap for production
+configMapGenerator:
+  - name: immich-config
+    behavior: merge
+    literals:
+      - NODE_ENV=production
+      - LOG_LEVEL=warn
+      - IMMICH_LOG_LEVEL=warn
+      - IMMICH_WORKERS=4
+
+# Production images (pinned versions)
+images:
+  - name: ghcr.io/immich-app/immich-server
+    newTag: v1.135.0
+  - name: pgvector/pgvector
+    newTag: pg15
+
+# Replicas for production (can scale up)
+replicas:
+  - name: immich-postgresql-pgvector
+    count: 1

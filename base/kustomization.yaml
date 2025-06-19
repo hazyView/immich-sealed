@@ -1,0 +1,82 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace for all resources
+namespace: immich
+
+# Create the namespace if it doesn't exist
+resources:
+  # Core Immich application (ArgoCD Application)
+  - immich-application.yaml
+  
+  # Persistent Volume Claims (must be created first)
+  - immich-pvcs.yaml
+  
+  # External Dependencies
+  - immich-postgresql-pgvector.yaml
+  - immich-redis-app.yaml
+  - immich-postgresql-app.yaml
+  
+  # Services
+  - immich-nodeport-service.yaml
+  - immich-loadbalancer-service.yaml
+  
+  # Optional: NGINX Proxy for HTTPS
+  - immich-nginx-proxy.yaml
+
+# Sealed Secrets (handled separately by ArgoCD)
+# These are applied via the Helm chart in apps/immich/
+
+# Common labels applied to all resources
+labels:
+  - pairs:
+      app.kubernetes.io/name: immich
+      app.kubernetes.io/instance: immich-sealed
+      app.kubernetes.io/component: immich-stack
+
+# Common annotations
+commonAnnotations:
+  app.kubernetes.io/managed-by: kustomize
+  
+# Images (can be used to override image versions)
+images:
+  - name: ghcr.io/immich-app/immich-server
+    newTag: v1.135.0
+  - name: pgvector/pgvector
+    newTag: pg15
+
+# ConfigMap generator for common configuration
+configMapGenerator:
+  - name: immich-config
+    literals:
+      - IMMICH_VERSION=v1.135.0
+      - NODE_ENV=production
+      - LOG_LEVEL=log
+
+# Patches to customize resources
+patches:
+  # Update resource limits for production
+  - target:
+      kind: StatefulSet
+      name: immich-postgresql-pgvector
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+
+# Replicas (can be used to scale components)
+replicas:
+  - name: immich-postgresql-pgvector
+    count: 1
+
+# Generators for additional resources
+generators: []
+
+# Transformers for advanced modifications
+transformers: []

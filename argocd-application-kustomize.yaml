@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: immich-kustomize
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/hazyView/immich-sealed  # Replace with your repo URL
+    targetRevision: main
+    path: overlays/production  # Can be changed to overlays/development
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: immich
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - Replace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m0s
