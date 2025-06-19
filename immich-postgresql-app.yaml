@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: immich-postgresql
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.bitnami.com/bitnami
+    targetRevision: "15.5.20"
+    chart: postgresql
+    helm:
+      values: |
+        # Use PostgreSQL image with pgvector pre-installed
+        image:
+          repository: ankane/pgvector
+          tag: "v0.5.1"
+        auth:
+          username: immich
+          database: immich
+          existingSecret: "immich-postgresql-temp"
+          secretKeys:
+            adminPasswordKey: "password"
+            userPasswordKey: "password"
+        primary:
+          # Note: pgvector extension will be installed manually after startup
+          persistence:
+            enabled: true
+            size: 20Gi
+          # Fix security context for PostgreSQL runtime directories
+          securityContext:
+            enabled: true
+            fsGroup: 1001
+            runAsUser: 1001
+          # Additional configuration for runtime directories
+          extraVolumes:
+          - name: postgres-run
+            emptyDir: {}
+          extraVolumeMounts:
+          - name: postgres-run
+            mountPath: /var/run/postgresql
+          # Init container to fix permissions
+          initContainers:
+          - name: fix-permissions
+            image: busybox:1.35
+            command: ['sh', '-c', 'echo "Fixing permissions"; ls -la /bitnami/; mkdir -p /bitnami/postgresql/data; chmod -R 755 /bitnami/postgresql; chown -R 1001:1001 /bitnami/postgresql; ls -la /bitnami/postgresql/; echo "Permissions fixed"']
+            volumeMounts:
+            - name: data
+              mountPath: /bitnami/postgresql
+            securityContext:
+              runAsUser: 0
+        # Override service name for consistency
+        fullnameOverride: "immich-postgresql"
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: immich
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

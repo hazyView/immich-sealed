@@ -20,14 +20,32 @@ spec:
           server:
             replicaCount: 1
 
-          # Environment variables to override service discovery
-          env:
-            REDIS_HOSTNAME: "immich-redis-master"
-            DB_HOSTNAME: "immich-postgresql"
-            DB_DATABASE_NAME: "immich"
-            DB_USERNAME: "immich"
-            # Remove DB_PASSWORD since we'll use existingSecret
+          # Environment variables for external PostgreSQL and Redis
+          server:
+            env:
+              REDIS_HOSTNAME: 
+                value: "immich-redis-master"
+              DB_HOSTNAME:
+                value: "immich-postgresql"
+              DB_DATABASE_NAME:
+                value: "immich"
+              DB_USERNAME:
+                value: "immich"
+              DB_PASSWORD:
+                valueFrom:
+                  secretKeyRef:
+                    name: "immich-postgresql-temp"
+                    key: "password"
+              DB_VECTOR_EXTENSION:
+                value: "pgvector"
+          # Disable built-in services
+          postgresql:
+            enabled: false  # Use external PostgreSQL
 
+          redis:
+            enabled: false  # Use external Redis
+
+          # Persistence configuration
           persistence:
             library:
               enabled: true
@@ -43,38 +61,7 @@ spec:
               accessMode: ReadWriteOnce
               size: 50Gi
 
-          postgresql:
-            enabled: true
-            nameOverride: "postgresql"
-            fullnameOverride: "immich-postgresql"
-            auth:
-              username: immich
-              database: immich
-            primary:
-              persistence:
-                enabled: true
-                size: 20Gi
-            # Ensure service is created
-            service:
-              ports:
-                postgresql: 5432
-
-          redis:
-            enabled: true
-            nameOverride: "redis"  
-            fullnameOverride: "immich-redis"
-            auth:
-              enabled: false
-            architecture: standalone
-            master:
-              persistence:
-                enabled: true
-                size: 8Gi
-            # Ensure service is created  
-            service:
-              ports:
-                redis: 6379
-
+          # Ingress configuration
           ingress:
             main:
               enabled: true
