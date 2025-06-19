@@ -232,14 +232,6 @@ kubectl get sealedsecret -n immich
 - [Sealed Secrets Documentation](https://sealed-secrets.netlify.app/)
 - [ArgoCD Documentation](https://argo-cd.readthedocs.io/)
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test with different environments
-5. Submit a pull request
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
