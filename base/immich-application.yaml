@@ -26,7 +26,7 @@ spec:
               REDIS_HOSTNAME: 
                 value: "immich-redis-master"
               DB_HOSTNAME:
-                value: "immich-postgresql"
+                value: "immich-postgresql-pgvector"
               DB_DATABASE_NAME:
                 value: "immich"
               DB_USERNAME:

@@ -8,26 +8,26 @@ This repository provides a complete Kubernetes deployment for Immich using Kusto
 immich-sealed/
 ├── base/                              # Base Kubernetes manifests
 │   ├── kustomization.yaml            # Base kustomization
-│   ├── immich-application.yaml       # ArgoCD application (Helm-based)
+│   ├── immich-application.yaml       # ArgoCD application for Immich
 │   ├── immich-pvcs.yaml              # Persistent Volume Claims
 │   ├── immich-postgresql-pgvector.yaml  # PostgreSQL with pgvector
 │   ├── immich-redis-app.yaml         # Redis deployment
-│   ├── immich-nodeport-service.yaml  # NodePort service
-│   ├── immich-loadbalancer-service.yaml # LoadBalancer service
-│   └── immich-nginx-proxy.yaml       # NGINX proxy with HTTPS
-├── overlays/                          # Environment-specific overlays
+│   ├── immich-nodeport-service.yaml     # NodePort service
+│   ├── immich-loadbalancer-service.yaml  # LoadBalancer service
+│   ├── immich-nginx-proxy.yaml          # NGINX proxy with HTTPS
+│   ├── immich-postgresql-secret.yaml    # PostgreSQL password secret
+│   ├── immich-monitoring.yaml           # ServiceMonitor and metrics (optional)
+│   └── immich-alerts.yaml               # PrometheusRule for alerts (optional)
+├── overlays/                             # Environment-specific overlays
 │   ├── development/
-│   │   └── kustomization.yaml        # Development configuration
-│   └── production/
-│       └── kustomization.yaml        # Production configuration
-├── apps/                              # Helm charts and sealed secrets
-│   └── immich/
-│       ├── Chart.yaml                # Helm chart definition
-│       ├── values.yaml               # Helm values
-│       └── sealed-immich-secret-new.yaml  # Sealed secret
-├── kustomization.yaml                 # Root kustomization (defaults to production)
-├── deploy.sh                          # Deployment script
-├── argocd-application-kustomize.yaml  # ArgoCD application for kustomize
+│   │   └── kustomization.yaml           # Development configuration
+│   ├── production/
+│   │   └── kustomization.yaml           # Production configuration (with monitoring)
+│   ├── production-no-monitoring/
+│   │   └── kustomization.yaml           # Production without monitoring
+│   └── monitoring/
+│       └── kustomization.yaml           # Monitoring-only overlay
+├── kustomization.yaml                    # Root kustomization (defaults to production-no-monitoring)
 └── README.md                          # This file
 ```
 
@@ -36,17 +36,40 @@ immich-sealed/
 ### Option 1: Using the Deployment Script
 
 ```bash
-# Deploy to production
+# Deploy to production (auto-detects monitoring capabilities)
 ./deploy.sh production
+
+# Deploy to production without monitoring
+./deploy.sh production-no-monitoring
 
 # Deploy to development
 ./deploy.sh development
+
+# Deploy with enhanced monitoring (requires Prometheus Operator)
+./deploy.sh monitoring
 
 # Deploy base configuration only
 ./deploy.sh base
 ```
 
 ### Option 2: Using Kustomize Directly
+
+```bash
+# Production deployment (monitoring auto-detected)
+kubectl apply -k overlays/production
+
+# Production without monitoring
+kubectl apply -k overlays/production-no-monitoring
+
+# Development deployment
+kubectl apply -k overlays/development
+
+# Base deployment
+kubectl apply -k base
+
+# With enhanced monitoring (requires Prometheus Operator CRDs)
+kubectl apply -k overlays/monitoring
+```
 
 ```bash
 # Production deployment
@@ -62,8 +85,8 @@ kubectl apply -k base
 ### Option 3: Using ArgoCD
 
 ```bash
-# Apply the ArgoCD application
-kubectl apply -f argocd-application-kustomize.yaml
+# Apply the ArgoCD application for Immich
+kubectl apply -f base/immich-application.yaml
 ```
 
 ## 🔧 Configuration
@@ -92,7 +115,7 @@ You can customize the deployment by:
 
 This setup uses Sealed Secrets for secure secret management:
 
-1. **PostgreSQL Password**: Stored in `apps/immich/sealed-immich-secret-new.yaml`
+1. **PostgreSQL Password**: Stored in `base/immich-postgresql-secret.yaml` as a SealedSecret
 2. **TLS Certificates**: Managed by the NGINX proxy configuration
 
 ### Creating New Sealed Secrets
@@ -104,6 +127,41 @@ kubectl create secret generic my-secret \
   --dry-run=client -o yaml > my-secret.yaml
 
 # Convert to sealed secret
+kubeseal -o yaml < my-secret.yaml > my-sealed-secret.yaml
+```
+
+## 📊 Monitoring
+
+### Built-in Monitoring Support
+This deployment includes monitoring-ready configurations that work with existing Prometheus/Grafana stacks:
+
+- **ServiceMonitors**: For Prometheus to discover metrics endpoints
+- **PrometheusRules**: Pre-configured alerts for Immich, PostgreSQL, and storage
+- **Metrics Services**: Separate services for metrics collection
+- **PostgreSQL Exporter**: Sidecar container for database metrics
+
+### Quick Monitoring Setup
+```bash
+# Deploy with enhanced monitoring
+kubectl apply -k overlays/monitoring
+
+# Or include monitoring in production
+kubectl apply -k overlays/production  # (monitoring included by default)
+```
+
+### Available Metrics
+- **Immich Server**: API stats, performance, user activity
+- **PostgreSQL**: Database performance, connections, queries
+- **Storage**: Disk usage, PVC metrics
+- **Kubernetes**: Pod CPU/memory, container metrics
+
+### Prerequisites
+Requires existing monitoring stack with:
+- Prometheus Operator (for ServiceMonitor CRDs)
+- Prometheus instance
+- Grafana (optional, for dashboards)
+
+For detailed monitoring setup instructions, see [`overlays/monitoring/README.md`](overlays/monitoring/README.md).
 kubeseal -o yaml < my-secret.yaml > my-sealed-secret.yaml
 ```
 
@@ -150,7 +208,7 @@ kubectl logs -n immich deployment/immich-server
 # Scale PostgreSQL (if needed)
 kubectl scale statefulset immich-postgresql-pgvector -n immich --replicas=1
 
-# Note: Immich server scaling is managed by the Helm chart
+# Note: Immich server scaling is managed by ArgoCD
 ```
 
 ## 🌐 Accessing Immich

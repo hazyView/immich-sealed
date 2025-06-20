@@ -6,8 +6,11 @@ namespace: immich
 
 # Create the namespace if it doesn't exist
 resources:
-  # Core Immich application (ArgoCD Application)
-  - immich-application.yaml
+  # Core Immich server deployment
+  - immich-server.yaml
+  
+  # Secrets (create before other resources)
+  - immich-postgresql-secret.yaml
   
   # Persistent Volume Claims (must be created first)
   - immich-pvcs.yaml
@@ -15,7 +18,6 @@ resources:
   # External Dependencies
   - immich-postgresql-pgvector.yaml
   - immich-redis-app.yaml
-  - immich-postgresql-app.yaml
   
   # Services
   - immich-nodeport-service.yaml
@@ -23,9 +25,12 @@ resources:
   
   # Optional: NGINX Proxy for HTTPS
   - immich-nginx-proxy.yaml
+  
+  # Monitoring (ServiceMonitors, PrometheusRules)
+  # Enable via overlays if you have Prometheus Operator CRDs installed
 
-# Sealed Secrets (handled separately by ArgoCD)
-# These are applied via the Helm chart in apps/immich/
+# Secrets (managed by Kustomize)
+# Use SealedSecrets or external secret management in production
 
 # Common labels applied to all resources
 labels:

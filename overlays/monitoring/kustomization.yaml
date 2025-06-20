@@ -1,0 +1,56 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to base configuration
+resources:
+  - ../../base
+  - immich-monitoring.yaml
+  - immich-alerts.yaml
+
+# Monitoring-specific labels
+labels:
+  - pairs:
+      monitoring.enabled: "true"
+
+# Monitoring-specific annotations
+commonAnnotations:
+  monitoring.grafana.io/enabled: "true"
+  monitoring.prometheus.io/enabled: "true"
+
+# Additional monitoring components
+patches:
+  # Add PostgreSQL Exporter sidecar
+  - target:
+      kind: StatefulSet
+      name: immich-postgresql-pgvector
+    path: postgresql-exporter-patch.yaml
+  
+  # Enable detailed metrics collection
+  - target:
+      kind: Service
+      name: immich-server-metrics
+    patch: |-
+      - op: add
+        path: /metadata/annotations/prometheus.io~1scrape_interval
+        value: "15s"
+  
+  # Add monitoring labels to StatefulSet
+  - target:
+      kind: StatefulSet
+      name: immich-postgresql-pgvector
+    patch: |-
+      - op: add
+        path: /spec/template/metadata/annotations/prometheus.io~1scrape
+        value: "true"
+      - op: add
+        path: /spec/template/metadata/annotations/prometheus.io~1port
+        value: "9187"
+
+# ConfigMap for monitoring configuration
+configMapGenerator:
+  - name: monitoring-config
+    literals:
+      - PROMETHEUS_ENABLED=true
+      - GRAFANA_ENABLED=true
+      - METRICS_INTERVAL=30s
+      - ALERT_MANAGER_ENABLED=true

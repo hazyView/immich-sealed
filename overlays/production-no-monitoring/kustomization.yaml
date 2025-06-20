@@ -18,7 +18,12 @@ commonAnnotations:
   environment: production
   backup.kubernetes.io/enabled: "true"
 
-# Production patches
+# Exclude monitoring resources if CRDs are not available
+# Uncomment these lines once Prometheus Operator is installed:
+# - immich-monitoring.yaml
+# - immich-alerts.yaml
+
+# Patches for production environment
 patches:
   # Production resource requirements
   - target:

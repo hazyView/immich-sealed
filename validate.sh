@@ -38,6 +38,16 @@ else
     exit 1
 fi
 
+# Test production-no-monitoring overlay
+echo "🏭 Testing production-no-monitoring overlay..."
+if kubectl kustomize overlays/production-no-monitoring > /dev/null 2>&1; then
+    echo "✅ Production-no-monitoring overlay is valid"
+else
+    echo "❌ Production-no-monitoring overlay has errors"
+    kubectl kustomize overlays/production-no-monitoring
+    exit 1
+fi
+
 # Test root kustomization
 echo "🌟 Testing root kustomization..."
 if kubectl kustomize . > /dev/null 2>&1; then
@@ -55,5 +65,6 @@ echo "📋 Resource counts:"
 echo "   Base resources: $(kubectl kustomize base | grep '^kind:' | wc -l | tr -d ' ')"
 echo "   Development resources: $(kubectl kustomize overlays/development | grep '^kind:' | wc -l | tr -d ' ')"
 echo "   Production resources: $(kubectl kustomize overlays/production | grep '^kind:' | wc -l | tr -d ' ')"
+echo "   Production (no monitoring): $(kubectl kustomize overlays/production-no-monitoring | grep '^kind:' | wc -l | tr -d ' ')"
 echo ""
 echo "✨ Ready for deployment!"

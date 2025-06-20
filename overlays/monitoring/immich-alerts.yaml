@@ -1,0 +1,96 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: immich-alerts
+  namespace: immich
+  labels:
+    app.kubernetes.io/name: immich
+    app.kubernetes.io/component: monitoring
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: immich.rules
+      interval: 30s
+      rules:
+        # Immich Server Alerts
+        - alert: ImmichServerDown
+          expr: up{job="immich-server"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            service: immich
+          annotations:
+            summary: "Immich server is down"
+            description: "Immich server has been down for more than 5 minutes"
+            
+        - alert: ImmichHighMemoryUsage
+          expr: container_memory_usage_bytes{pod=~"immich-server-.*"} / container_spec_memory_limit_bytes > 0.8
+          for: 10m
+          labels:
+            severity: warning
+            service: immich
+          annotations:
+            summary: "Immich server high memory usage"
+            description: "Immich server memory usage is above 80% for more than 10 minutes"
+            
+        - alert: ImmichHighCPUUsage
+          expr: rate(container_cpu_usage_seconds_total{pod=~"immich-server-.*"}[5m]) > 0.8
+          for: 15m
+          labels:
+            severity: warning
+            service: immich
+          annotations:
+            summary: "Immich server high CPU usage"
+            description: "Immich server CPU usage is above 80% for more than 15 minutes"
+            
+        # PostgreSQL Alerts
+        - alert: PostgreSQLDown
+          expr: up{job="immich-postgresql"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            service: postgresql
+          annotations:
+            summary: "PostgreSQL is down"
+            description: "PostgreSQL database has been down for more than 5 minutes"
+            
+        - alert: PostgreSQLHighConnections
+          expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+          for: 10m
+          labels:
+            severity: warning
+            service: postgresql
+          annotations:
+            summary: "PostgreSQL high connection usage"
+            description: "PostgreSQL connection usage is above 80%"
+            
+        - alert: PostgreSQLSlowQueries
+          expr: pg_stat_activity_max_tx_duration > 300
+          for: 5m
+          labels:
+            severity: warning
+            service: postgresql
+          annotations:
+            summary: "PostgreSQL slow queries detected"
+            description: "PostgreSQL has queries running for more than 5 minutes"
+            
+        # Storage Alerts
+        - alert: ImmichStorageSpaceLow
+          expr: (kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"immich-server-.*"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"immich-server-.*"}) < 0.1
+          for: 5m
+          labels:
+            severity: warning
+            service: immich
+          annotations:
+            summary: "Immich storage space low"
+            description: "Immich storage is more than 90% full"
+            
+        - alert: ImmichStorageSpaceCritical
+          expr: (kubelet_volume_stats_available_bytes{persistentvolumeclaim=~"immich-server-.*"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"immich-server-.*"}) < 0.05
+          for: 1m
+          labels:
+            severity: critical
+            service: immich
+          annotations:
+            summary: "Immich storage space critical"
+            description: "Immich storage is more than 95% full"
