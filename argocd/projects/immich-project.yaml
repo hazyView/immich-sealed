@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: immich
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: immich
+    app.kubernetes.io/component: project
+spec:
+  description: Immich photo management application project
+  
+  # Source repositories that applications within this project can pull from
+  sourceRepos:
+  - 'https://github.com/your-org/immich-sealed'  # Update with your repo URL
+  - 'https://immich-app.github.io/immich-charts'
+  - 'https://charts.bitnami.com/bitnami'
+  
+  # Destinations where applications can be deployed
+  destinations:
+  - namespace: immich
+    server: https://kubernetes.default.svc
+  - namespace: immich-dev
+    server: https://kubernetes.default.svc
+  
+  # Cluster resources that can be managed
+  clusterResourceWhitelist:
+  - group: ''
+    kind: PersistentVolume
+  - group: 'storage.k8s.io'
+    kind: StorageClass
+  - group: 'networking.k8s.io'
+    kind: NetworkPolicy
+  
+  # Namespace resources that can be managed
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: '*'
+  - group: 'apps'
+    kind: '*'
+  - group: 'networking.k8s.io'
+    kind: '*'
+  - group: 'monitoring.coreos.com'
+    kind: '*'
+  - group: 'bitnami.com'
+    kind: '*'
+  
+  # Roles for project access (optional)
+  roles:
+  - name: immich-admin
+    description: Admin access to Immich project
+    policies:
+    - p, proj:immich:immich-admin, applications, *, immich/*, allow
+    - p, proj:immich:immich-admin, repositories, *, *, allow
+    groups:
+    - admins
+  
+  - name: immich-developer
+    description: Developer access to Immich project
+    policies:
+    - p, proj:immich:immich-developer, applications, get, immich/*, allow
+    - p, proj:immich:immich-developer, applications, sync, immich/*, allow
+    groups:
+    - developers
