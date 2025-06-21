@@ -1,0 +1,107 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  security-scan:
+    name: 🔒 Comprehensive Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install security tools
+      run: |
+        # Install Trivy
+        sudo apt-get update
+        sudo apt-get install wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install trivy
+        
+        # Install kubesec
+        wget https://github.com/controlplaneio/kubesec/releases/latest/download/kubesec_linux_amd64.tar.gz
+        tar -xzf kubesec_linux_amd64.tar.gz
+        sudo mv kubesec /usr/local/bin/
+        
+    - name: Set up Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+        
+    - name: Scan filesystem for secrets
+      run: |
+        echo "🔍 Scanning for secrets in repository..."
+        trivy fs --security-checks secret --format table .
+        
+    - name: Scan container images
+      run: |
+        echo "🔍 Scanning container images for vulnerabilities..."
+        
+        # Extract image references from manifests
+        images=$(find . -name "*.yaml" -o -name "*.yml" | xargs grep -h "image:" | grep -E "(ghcr\.io|redis|postgres)" | sort -u | sed 's/.*image: *//' | sed 's/"//g')
+        
+        for image in $images; do
+          if [[ "$image" != *"$"* ]] && [[ "$image" != *"{"* ]]; then
+            echo "Scanning image: $image"
+            trivy image --format table "$image" || true
+          fi
+        done
+        
+    - name: Kubernetes security analysis
+      run: |
+        echo "🔍 Analyzing Kubernetes manifests for security issues..."
+        
+        for overlay in overlays/*; do
+          if [ -d "$overlay" ]; then
+            env_name=$(basename "$overlay")
+            echo "Analyzing $env_name environment..."
+            
+            # Generate manifest
+            kustomize build "$overlay" > "${env_name}-security-scan.yaml"
+            
+            # Run kubesec analysis
+            kubesec scan "${env_name}-security-scan.yaml" || true
+            
+            rm "${env_name}-security-scan.yaml"
+          fi
+        done
+        
+    - name: Check for hardcoded secrets
+      run: |
+        echo "🔍 Checking for hardcoded secrets and credentials..."
+        
+        # Common secret patterns
+        if grep -r -i -E "(password|secret|key|token|credential).*[:=].*['\"][^'\"]{8,}" . --include="*.yaml" --include="*.yml" --exclude-dir=".git"; then
+          echo "❌ Potential hardcoded secrets found!"
+          exit 1
+        else
+          echo "✅ No hardcoded secrets detected"
+        fi
+        
+    - name: Validate RBAC configurations
+      run: |
+        echo "🔍 Validating RBAC configurations..."
+        
+        # Check for overly permissive RBAC
+        if find . -name "*.yaml" -o -name "*.yml" | xargs grep -l "ClusterRoleBinding\|ClusterRole" | head -1; then
+          echo "⚠️  ClusterRole bindings found - review for least privilege"
+          find . -name "*.yaml" -o -name "*.yml" | xargs grep -A 10 -B 2 "ClusterRole" || true
+        fi
+        
+        # Check for wildcard permissions
+        if find . -name "*.yaml" -o -name "*.yml" | xargs grep -E 'resources:\s*\[.*"\*".*\]|verbs:\s*\[.*"\*".*\]'; then
+          echo "❌ Wildcard RBAC permissions found!"
+          exit 1
+        else
+          echo "✅ No wildcard RBAC permissions found"
+        fi

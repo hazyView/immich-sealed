@@ -1,0 +1,504 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'base/**'
+      - 'overlays/**'
+      - 'argocd/**'
+      - '*.sh'
+      - '*.yaml'
+      - '*.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'base/**'
+      - 'overlays/**'
+      - 'argocd/**'
+      - '*.sh'
+      - '*.yaml'
+      - '*.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - production
+        - production-no-monitoring
+        - monitoring
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Job 1: Validate all Kubernetes manifests
+  validate-manifests:
+    name: 🔍 Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+        
+    - name: Verify Kustomize installation
+      run: kustomize version
+      
+    - name: Make scripts executable
+      run: |
+        chmod +x validate.sh deploy.sh
+        
+    - name: Run validation script
+      run: ./validate.sh
+      
+    - name: Validate base configuration
+      run: |
+        echo "🔍 Validating base configuration..."
+        kustomize build base > /dev/null
+        echo "✅ Base configuration is valid"
+        
+    - name: Validate all overlays
+      run: |
+        for overlay in overlays/*; do
+          if [ -d "$overlay" ]; then
+            echo "🔍 Validating $(basename "$overlay") overlay..."
+            kustomize build "$overlay" > /dev/null
+            echo "✅ $(basename "$overlay") overlay is valid"
+          fi
+        done
+        
+    - name: Validate ArgoCD configuration
+      run: |
+        if [ -d "argocd" ]; then
+          echo "🔍 Validating ArgoCD configuration..."
+          kustomize build argocd > /dev/null
+          echo "✅ ArgoCD configuration is valid"
+        fi
+
+  # Job 2: Test all environments
+  test-environments:
+    name: 🧪 Test Environment Configurations
+    runs-on: ubuntu-latest
+    needs: validate-manifests
+    
+    strategy:
+      matrix:
+        environment: [development, production, production-no-monitoring, monitoring]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+        
+    - name: Test ${{ matrix.environment }} environment
+      run: |
+        echo "🧪 Testing ${{ matrix.environment }} environment..."
+        
+        # Build and validate the overlay
+        kustomize build overlays/${{ matrix.environment }} > ${{ matrix.environment }}-manifest.yaml
+        
+        # Check if manifest is not empty
+        if [ ! -s ${{ matrix.environment }}-manifest.yaml ]; then
+          echo "❌ Generated manifest is empty!"
+          exit 1
+        fi
+        
+        # Count resources
+        RESOURCE_COUNT=$(grep -c "^kind:" ${{ matrix.environment }}-manifest.yaml || true)
+        echo "📊 Generated $RESOURCE_COUNT Kubernetes resources"
+        
+        # Validate specific requirements per environment
+        case "${{ matrix.environment }}" in
+          "development")
+            echo "🔍 Validating development-specific configuration..."
+            grep -q "immich-dev" ${{ matrix.environment }}-manifest.yaml || (echo "❌ Development namespace not found" && exit 1)
+            grep -q "LOG_LEVEL.*debug" ${{ matrix.environment }}-manifest.yaml || (echo "❌ Debug logging not enabled" && exit 1)
+            ;;
+          "production")
+            echo "🔍 Validating production-specific configuration..."
+            grep -q "namespace: immich" ${{ matrix.environment }}-manifest.yaml || (echo "❌ Production namespace not found" && exit 1)
+            grep -q "v1.135.0" ${{ matrix.environment }}-manifest.yaml || (echo "❌ Pinned image version not found" && exit 1)
+            ;;
+          "monitoring")
+            echo "🔍 Validating monitoring-specific configuration..."
+            grep -q "ServiceMonitor" ${{ matrix.environment }}-manifest.yaml || (echo "❌ ServiceMonitor not found" && exit 1)
+            grep -q "PrometheusRule" ${{ matrix.environment }}-manifest.yaml || (echo "❌ PrometheusRule not found" && exit 1)
+            ;;
+        esac
+        
+        echo "✅ ${{ matrix.environment }} environment validation passed"
+        
+    - name: Upload manifest artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.environment }}-manifest
+        path: ${{ matrix.environment }}-manifest.yaml
+        retention-days: 7
+
+  # Job 3: Security and compliance scanning
+  security-compliance:
+    name: 🔒 Security & Compliance Scan
+    runs-on: ubuntu-latest
+    needs: validate-manifests
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+        
+    - name: Install Trivy
+      run: |
+        sudo apt-get update
+        sudo apt-get install wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install trivy
+        
+    - name: Scan for secrets in repository
+      run: |
+        echo "🔍 Scanning for potential secrets..."
+        trivy fs --security-checks secret --format table .
+        
+        # Fail if any HIGH or CRITICAL secrets are found
+        if trivy fs --security-checks secret --format json . | jq '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")' | grep -q .; then
+          echo "❌ HIGH or CRITICAL security issues found!"
+          exit 1
+        fi
+        echo "✅ No critical secrets found"
+        
+    - name: Validate security configurations
+      run: |
+        echo "🔍 Validating security configurations..."
+        
+        # Check for resource limits
+        for overlay in overlays/*; do
+          if [ -d "$overlay" ]; then
+            manifest_file=$(basename "$overlay")-security-check.yaml
+            kustomize build "$overlay" > "$manifest_file"
+            
+            echo "Checking $(basename "$overlay") for security best practices..."
+            
+            # Check for resource limits
+            if ! grep -q "resources:" "$manifest_file"; then
+              echo "⚠️  No resource limits found in $(basename "$overlay")"
+            else
+              echo "✅ Resource limits configured in $(basename "$overlay")"
+            fi
+            
+            # Check for security contexts
+            if grep -q "securityContext:" "$manifest_file"; then
+              echo "✅ Security contexts found in $(basename "$overlay")"
+            else
+              echo "⚠️  No security contexts found in $(basename "$overlay")"
+            fi
+            
+            # Check for non-root users
+            if grep -q "runAsNonRoot: true" "$manifest_file"; then
+              echo "✅ Non-root execution configured in $(basename "$overlay")"
+            fi
+            
+            rm "$manifest_file"
+          fi
+        done
+        
+    - name: Check for common misconfigurations
+      run: |
+        echo "🔍 Checking for common Kubernetes misconfigurations..."
+        
+        # Check for latest tags in production
+        production_manifest="prod-security-check.yaml"
+        kustomize build overlays/production > "$production_manifest"
+        
+        if grep -q ":latest" "$production_manifest"; then
+          echo "❌ Found 'latest' tags in production configuration!"
+          grep ":latest" "$production_manifest" || true
+          exit 1
+        else
+          echo "✅ No 'latest' tags found in production"
+        fi
+        
+        # Check for privileged containers
+        if grep -q "privileged: true" "$production_manifest"; then
+          echo "❌ Found privileged containers in production!"
+          exit 1
+        else
+          echo "✅ No privileged containers found"
+        fi
+        
+        rm "$production_manifest"
+
+  # Job 4: Generate deployment artifacts
+  generate-artifacts:
+    name: 📦 Generate Deployment Artifacts
+    runs-on: ubuntu-latest
+    needs: [test-environments, security-compliance]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+        
+    - name: Generate deployment manifests
+      run: |
+        mkdir -p deployment-artifacts
+        
+        # Generate manifests for each environment
+        for overlay in overlays/*; do
+          if [ -d "$overlay" ]; then
+            env_name=$(basename "$overlay")
+            echo "📦 Generating manifest for $env_name..."
+            
+            kustomize build "$overlay" > "deployment-artifacts/$env_name-manifest.yaml"
+            
+            # Add metadata header
+            cat > "deployment-artifacts/$env_name-manifest-with-header.yaml" << EOF
+        # Immich Sealed - $env_name Environment
+        # Generated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        # Git Commit: ${{ github.sha }}
+        # Git Ref: ${{ github.ref }}
+        # Workflow: ${{ github.workflow }}
+        #
+        # Deploy with: kubectl apply -f $env_name-manifest.yaml
+        #
+        ---
+        EOF
+            cat "deployment-artifacts/$env_name-manifest.yaml" >> "deployment-artifacts/$env_name-manifest-with-header.yaml"
+            
+            # Create installation script
+            cat > "deployment-artifacts/deploy-$env_name.sh" << EOF
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Deploying Immich Sealed - $env_name Environment"
+        echo "Generated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+        echo "Git Commit: ${{ github.sha }}"
+        
+        # Validate kubectl connection
+        if ! kubectl cluster-info >&/dev/null; then
+          echo "❌ kubectl is not connected to a cluster"
+          exit 1
+        fi
+        
+        # Apply the manifest
+        echo "📦 Applying Kubernetes manifests..."
+        kubectl apply -f $env_name-manifest-with-header.yaml
+        
+        # Wait for deployment to be ready
+        echo "⏳ Waiting for deployment to be ready..."
+        namespace="immich"
+        if [ "$env_name" = "development" ]; then
+          namespace="immich-dev"
+        fi
+        
+        kubectl wait --for=condition=available --timeout=300s deployment -l app.kubernetes.io/name=immich -n \$namespace || true
+        
+        echo "✅ Deployment completed!"
+        echo "📋 Check status with: kubectl get pods -n \$namespace"
+        EOF
+            
+            chmod +x "deployment-artifacts/deploy-$env_name.sh"
+          fi
+        done
+        
+        # Generate ArgoCD artifacts if present
+        if [ -d "argocd" ]; then
+          echo "📦 Generating ArgoCD artifacts..."
+          kustomize build argocd > "deployment-artifacts/argocd-applications.yaml"
+          
+          cat > "deployment-artifacts/deploy-argocd.sh" << EOF
+        #!/bin/bash
+        set -e
+        
+        echo "🚀 Deploying Immich Sealed - ArgoCD Applications"
+        
+        # Validate ArgoCD installation
+        if ! kubectl get crd applications.argoproj.io >&/dev/null; then
+          echo "❌ ArgoCD is not installed in the cluster"
+          echo "Install ArgoCD first: kubectl create namespace argocd && kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml"
+          exit 1
+        fi
+        
+        # Apply ArgoCD applications
+        echo "📦 Applying ArgoCD applications..."
+        kubectl apply -f argocd-applications.yaml
+        
+        echo "✅ ArgoCD applications deployed!"
+        echo "🌐 Access ArgoCD UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+        EOF
+          
+          chmod +x "deployment-artifacts/deploy-argocd.sh"
+        fi
+        
+        # Create summary
+        cat > "deployment-artifacts/README.md" << EOF
+        # Immich Sealed - Deployment Artifacts
+        
+        Generated on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        Git Commit: ${{ github.sha }}
+        Git Ref: ${{ github.ref }}
+        
+        ## Available Deployments
+        
+        $(for f in deployment-artifacts/*-manifest-with-header.yaml; do 
+          env=$(basename "$f" -manifest-with-header.yaml)
+          echo "- **$env**: \`kubectl apply -f $env-manifest-with-header.yaml\` or run \`./deploy-$env.sh\`"
+        done)
+        
+        ## Quick Deploy
+        
+        \`\`\`bash
+        # Make scripts executable
+        chmod +x deploy-*.sh
+        
+        # Deploy development environment
+        ./deploy-development.sh
+        
+        # Deploy production environment  
+        ./deploy-production.sh
+        
+        # Deploy with ArgoCD
+        ./deploy-argocd.sh
+        \`\`\`
+        
+        ## Validation
+        
+        All manifests have been validated and tested in CI/CD pipeline.
+        
+        ## Support
+        
+        For issues, please check the main repository: ${{ github.server_url }}/${{ github.repository }}
+        EOF
+        
+    - name: Upload deployment artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-artifacts-${{ github.sha }}
+        path: deployment-artifacts/
+        retention-days: 30
+
+  # Job 5: Deploy to development (automatic on main branch)
+  deploy-development:
+    name: 🚀 Deploy to Development
+    runs-on: ubuntu-latest
+    needs: generate-artifacts
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: development
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download deployment artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: deployment-artifacts-${{ github.sha }}
+        path: deployment-artifacts/
+        
+    - name: Simulate deployment validation
+      run: |
+        echo "🧪 Simulating development deployment..."
+        
+        # In a real scenario, you would configure kubectl to connect to your cluster
+        # and run the actual deployment. For now, we'll simulate validation.
+        
+        if [ -f "deployment-artifacts/development-manifest-with-header.yaml" ]; then
+          echo "✅ Development manifest is ready for deployment"
+          
+          # Show deployment size
+          resource_count=$(grep -c "^kind:" deployment-artifacts/development-manifest-with-header.yaml || echo "0")
+          echo "📊 Deployment contains $resource_count Kubernetes resources"
+          
+          # Validate manifest structure
+          if grep -q "namespace: immich-dev" deployment-artifacts/development-manifest-with-header.yaml; then
+            echo "✅ Development namespace configured correctly"
+          fi
+          
+          if grep -q "LOG_LEVEL.*debug" deployment-artifacts/development-manifest-with-header.yaml; then
+            echo "✅ Debug logging enabled for development"
+          fi
+          
+          echo "🎉 Development deployment validation passed!"
+        else
+          echo "❌ Development manifest not found!"
+          exit 1
+        fi
+        
+    # Uncomment and configure the following steps for actual deployment
+    # - name: Configure kubectl
+    #   run: |
+    #     # Configure kubectl with your cluster credentials
+    #     # This depends on your cluster setup (EKS, GKE, AKS, etc.)
+    #     
+    # - name: Deploy to development cluster
+    #   run: |
+    #     ./deployment-artifacts/deploy-development.sh
+
+  # Job 6: Manual deployment trigger
+  manual-deploy:
+    name: 🎯 Manual Deployment
+    runs-on: ubuntu-latest
+    needs: generate-artifacts
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download deployment artifacts  
+      uses: actions/download-artifact@v4
+      with:
+        name: deployment-artifacts-${{ github.sha }}
+        path: deployment-artifacts/
+        
+    - name: Validate selected environment
+      run: |
+        ENVIRONMENT="${{ github.event.inputs.environment }}"
+        echo "🎯 Manual deployment requested for: $ENVIRONMENT"
+        
+        if [ -f "deployment-artifacts/${ENVIRONMENT}-manifest-with-header.yaml" ]; then
+          echo "✅ $ENVIRONMENT manifest is ready"
+          
+          # Show deployment details
+          resource_count=$(grep -c "^kind:" "deployment-artifacts/${ENVIRONMENT}-manifest-with-header.yaml" || echo "0")
+          echo "📊 Deployment contains $resource_count Kubernetes resources"
+          
+          echo "🚀 Ready to deploy $ENVIRONMENT environment"
+          echo "📋 Manifest: ${ENVIRONMENT}-manifest-with-header.yaml"
+          echo "🔨 Script: deploy-${ENVIRONMENT}.sh"
+        else
+          echo "❌ $ENVIRONMENT manifest not found!"
+          exit 1
+        fi
+        
+    # Add actual deployment steps here based on your infrastructure
+    - name: Display deployment instructions
+      run: |
+        ENVIRONMENT="${{ github.event.inputs.environment }}"
+        echo "🔧 To deploy manually, download the artifacts and run:"
+        echo "   chmod +x deploy-${ENVIRONMENT}.sh"
+        echo "   ./deploy-${ENVIRONMENT}.sh"

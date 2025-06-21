@@ -1,0 +1,266 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  release:
+    name: 🎉 Create Release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Kustomize
+      run: |
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+        
+    - name: Generate release artifacts
+      run: |
+        mkdir -p release-artifacts
+        
+        # Set version
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.tag }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        
+        echo "📦 Creating release artifacts for $VERSION"
+        
+        # Generate manifests for each environment
+        for overlay in overlays/*; do
+          if [ -d "$overlay" ]; then
+            env_name=$(basename "$overlay")
+            echo "Generating $env_name release manifest..."
+            
+            # Create versioned manifest
+            cat > "release-artifacts/immich-sealed-${env_name}-${VERSION}.yaml" << EOF
+        # Immich Sealed - ${env_name} Environment
+        # Version: ${VERSION}
+        # Release Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        # 
+        # Installation:
+        #   kubectl apply -f immich-sealed-${env_name}-${VERSION}.yaml
+        #
+        # Documentation: https://github.com/${{ github.repository }}
+        #
+        ---
+        EOF
+            
+            kustomize build "$overlay" >> "release-artifacts/immich-sealed-${env_name}-${VERSION}.yaml"
+            
+            # Create installation script
+            cat > "release-artifacts/install-${env_name}.sh" << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        VERSION="${VERSION}"
+        ENVIRONMENT="${env_name}"
+        
+        echo "🚀 Installing Immich Sealed $ENVIRONMENT ($VERSION)"
+        
+        # Check prerequisites
+        if ! command -v kubectl &> /dev/null; then
+          echo "❌ kubectl is required but not installed"
+          exit 1
+        fi
+        
+        if ! kubectl cluster-info &> /dev/null; then
+          echo "❌ kubectl is not connected to a cluster"
+          exit 1
+        fi
+        
+        # Check for sealed-secrets controller
+        if ! kubectl get crd sealedsecrets.bitnami.com &> /dev/null; then
+          echo "⚠️  Sealed Secrets controller not found"
+          echo "   Install with: kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml"
+          read -p "Continue anyway? (y/N): " -n 1 -r
+          echo
+          if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+          fi
+        fi
+        
+        # Apply the manifest
+        echo "📦 Applying Kubernetes manifests..."
+        kubectl apply -f "immich-sealed-${ENVIRONMENT}-${VERSION}.yaml"
+        
+        # Determine namespace
+        NAMESPACE="immich"
+        if [ "$ENVIRONMENT" = "development" ]; then
+          NAMESPACE="immich-dev"
+        fi
+        
+        echo "⏳ Waiting for deployment to be ready..."
+        kubectl wait --for=condition=available --timeout=600s deployment -l app.kubernetes.io/name=immich -n $NAMESPACE || true
+        
+        echo "✅ Installation completed!"
+        echo ""
+        echo "📋 Check status:"
+        echo "   kubectl get pods -n $NAMESPACE"
+        echo ""
+        echo "🌐 Access Immich:"
+        echo "   kubectl port-forward -n $NAMESPACE svc/immich-server 3001:3001"
+        echo "   Then visit: http://localhost:3001"
+        echo ""
+        echo "📚 Documentation: https://github.com/${{ github.repository }}"
+        EOF
+            
+            # Replace template variables
+            sed -i "s/\${VERSION}/$VERSION/g" "release-artifacts/install-${env_name}.sh"
+            sed -i "s/\${env_name}/$env_name/g" "release-artifacts/install-${env_name}.sh"
+            chmod +x "release-artifacts/install-${env_name}.sh"
+          fi
+        done
+        
+        # Create comprehensive installation guide
+        cat > "release-artifacts/INSTALLATION.md" << EOF
+        # Immich Sealed - Installation Guide
+        
+        Version: $VERSION
+        Release Date: $(date -u +"%Y-%m-%d")
+        
+        ## Quick Start
+        
+        ### 1. Prerequisites
+        
+        - Kubernetes cluster (1.20+)
+        - kubectl configured
+        - Sealed Secrets controller (recommended)
+        
+        \`\`\`bash
+        # Install Sealed Secrets controller
+        kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
+        \`\`\`
+        
+        ### 2. Choose Your Environment
+        
+        #### Production (Recommended)
+        \`\`\`bash
+        chmod +x install-production.sh
+        ./install-production.sh
+        \`\`\`
+        
+        #### Development
+        \`\`\`bash
+        chmod +x install-development.sh
+        ./install-development.sh
+        \`\`\`
+        
+        #### Production without Monitoring
+        \`\`\`bash
+        chmod +x install-production-no-monitoring.sh
+        ./install-production-no-monitoring.sh
+        \`\`\`
+        
+        #### Enhanced Monitoring (requires Prometheus Operator)
+        \`\`\`bash
+        chmod +x install-monitoring.sh
+        ./install-monitoring.sh
+        \`\`\`
+        
+        ### 3. Manual Installation
+        
+        \`\`\`bash
+        # Apply manifest directly
+        kubectl apply -f immich-sealed-production-$VERSION.yaml
+        \`\`\`
+        
+        ## Verification
+        
+        \`\`\`bash
+        # Check pods
+        kubectl get pods -n immich
+        
+        # Access Immich
+        kubectl port-forward -n immich svc/immich-server 3001:3001
+        # Visit: http://localhost:3001
+        \`\`\`
+        
+        ## Troubleshooting
+        
+        ### Common Issues
+        
+        1. **Pods stuck in Pending**: Check storage class availability
+        2. **SealedSecret errors**: Ensure sealed-secrets controller is running
+        3. **Database connection errors**: Verify PostgreSQL pod is healthy
+        
+        ### Debug Commands
+        
+        \`\`\`bash
+        # Check pod status
+        kubectl describe pod -n immich <pod-name>
+        
+        # View logs
+        kubectl logs -n immich deployment/immich-server -f
+        
+        # Check services
+        kubectl get svc -n immich
+        \`\`\`
+        
+        ## Support
+        
+        - Documentation: https://github.com/${{ github.repository }}
+        - Issues: https://github.com/${{ github.repository }}/issues
+        - Immich Docs: https://immich.app/docs
+        EOF
+        
+        # Create checksums
+        cd release-artifacts
+        sha256sum * > checksums.txt
+        cd ..
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release-artifacts/*
+        name: Immich Sealed ${{ github.ref_name }}
+        body: |
+          ## Immich Sealed Release ${{ github.ref_name }}
+          
+          Complete Kubernetes deployment for Immich with multi-environment support.
+          
+          ### 🎯 What's Included
+          
+          - **Production Environment**: `immich-sealed-production-${{ github.ref_name }}.yaml`
+          - **Development Environment**: `immich-sealed-development-${{ github.ref_name }}.yaml`
+          - **Production (No Monitoring)**: `immich-sealed-production-no-monitoring-${{ github.ref_name }}.yaml`
+          - **Enhanced Monitoring**: `immich-sealed-monitoring-${{ github.ref_name }}.yaml`
+          - **Installation Scripts**: `install-*.sh` for each environment
+          - **Installation Guide**: `INSTALLATION.md`
+          
+          ### 🚀 Quick Install
+          
+          ```bash
+          # Download and install production environment
+          wget https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/install-production.sh
+          chmod +x install-production.sh
+          ./install-production.sh
+          ```
+          
+          ### 📋 Requirements
+          
+          - Kubernetes 1.20+
+          - kubectl configured
+          - Sealed Secrets controller (recommended)
+          
+          ### 🔍 Verification
+          
+          All manifests have been validated and tested in CI/CD pipeline.
+          
+          **Checksums**: See `checksums.txt` for file verification.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

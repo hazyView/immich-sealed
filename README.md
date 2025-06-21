@@ -1,10 +1,10 @@
-# Immich Sealed - Production-Ready Kubernetes Deployment
+# Immich Sealed - Kubernetes Deployment
 
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.20+-blue.svg)](https://kubernetes.io/)
 [![Kustomize](https://img.shields.io/badge/Kustomize-3.0+-green.svg)](https://kustomize.io/)
 [![Immich](https://img.shields.io/badge/Immich-v1.135.0-purple.svg)](https://immich.app/)
 
-A complete, production-ready Kubernetes deployment for [Immich](https://immich.app/) using Kustomize with multi-environment support, monitoring integration, and GitOps compatibility.
+A complete and ready Kubernetes deployment for [Immich](https://immich.app/) using Kustomize with multi-environment support, monitoring integration, and GitOps compatibility. K8S learning project.
 
 ## ✨ Features
 
@@ -64,8 +64,8 @@ immich-sealed/
 
 - Kubernetes cluster (1.20+)
 - kubectl configured to access your cluster
-- [Kustomize](https://kustomize.io/) (built into kubectl 1.14+)
-- [Sealed Secrets Controller](https://sealed-secrets.netlify.app/) (for production deployments)
+- [Kustomize](https://kustomize.io/) 
+- [Sealed Secrets Controller](https://sealed-secrets.netlify.app/) 
 
 ### Option 1: Automated Deployment (Recommended)
 
@@ -73,7 +73,7 @@ The deployment script automatically detects your environment and monitoring capa
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/hazyView/immich-sealed
 cd immich-sealed
 
 # Make scripts executable
