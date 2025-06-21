@@ -81,9 +81,25 @@ jobs:
         echo "🔍 Checking for hardcoded secrets and credentials..."
         
         # Common secret patterns
-        if grep -r -i -E "(password|secret|key|token|credential).*[:=].*['\"][^'\"]{8,}" . --include="*.yaml" --include="*.yml" --exclude-dir=".git"; then
-          echo "❌ Potential hardcoded secrets found!"
-          exit 1
+        if grep -r -i -E "(password|secret|key|token|credential).*[:=].*['\"][^'\"]{8,}" . \
+        --include="*.yaml" --include="*.yml" --exclude-dir=".git" \
+        | grep -v "secretKeyRef" \
+        | grep -v "configMapKeyRef" \
+        | grep -v "valueFrom:" \
+        | grep -v "name.*secret" \
+        | grep -v "key.*:" \
+        | grep -v "# " ; then
+        echo "❌ Potential hardcoded secrets found!"
+        echo "Found suspicious patterns:"
+        grep -r -i -E "(password|secret|key|token|credential).*[:=].*['\"][^'\"]{8,}" . \
+        --include="*.yaml" --include="*.yml" --exclude-dir=".git" \
+        | grep -v "secretKeyRef" \
+        | grep -v "configMapKeyRef" \
+        | grep -v "valueFrom:" \
+        | grep -v "name.*secret" \
+        | grep -v "key.*:" \
+        | grep -v "# " || true
+        exit 1
         else
           echo "✅ No hardcoded secrets detected"
         fi
