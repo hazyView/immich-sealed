@@ -17,14 +17,14 @@ resources:
   
   # External Dependencies
   - immich-postgresql-pgvector.yaml
-  - immich-redis-app.yaml
+  - immich-redis.yaml
   
   # Services
   - immich-nodeport-service.yaml
   - immich-loadbalancer-service.yaml
   
   # Optional: NGINX Proxy for HTTPS
-  - immich-nginx-proxy.yaml
+  - immich-nginx-proxy.yaml  
   
   # Monitoring (ServiceMonitors, PrometheusRules)
   # Enable via overlays if you have Prometheus Operator CRDs installed

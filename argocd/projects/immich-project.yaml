@@ -11,7 +11,7 @@ spec:
   
   # Source repositories that applications within this project can pull from
   sourceRepos:
-  - 'https://github.com/your-org/immich-sealed'  # Update with your repo URL
+  - 'https://github.com/hazyView/immich-sealed'  # Update with your repo URL
   - 'https://immich-app.github.io/immich-charts'
   - 'https://charts.bitnami.com/bitnami'
   
