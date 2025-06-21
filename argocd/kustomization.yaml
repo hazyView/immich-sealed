@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - projects/immich-project.yaml
+  - applications/immich-production.yaml
+  - applications/immich-development.yaml
+  - applications/immich-kustomize.yaml
+  - applications/immich-redis.yaml
