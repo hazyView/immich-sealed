@@ -9,7 +9,7 @@ metadata:
 spec:
   project: immich
   source:
-    repoURL: https://github.com/your-org/immich-sealed  # Update with your repo URL
+    repoURL: https://github.com/hazyView/immich-sealed  # Update with your repo URL
     targetRevision: HEAD
     path: overlays/production-no-monitoring
   destination:
