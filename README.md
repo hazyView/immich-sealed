@@ -717,27 +717,10 @@ Before deploying to production, ensure:
 - [ ] **Security Policies** are in place (RBAC, Network Policies)
 - [ ] **Disaster Recovery** plan is documented
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and test thoroughly
-4. Validate all overlays: `./validate.sh`
-5. Commit your changes: `git commit -m 'Add amazing feature'`
-6. Push to the branch: `git push origin feature/amazing-feature`
-7. Open a Pull Request
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Immich Team](https://github.com/immich-app/immich) for the amazing photo management application
-- [Kubernetes Community](https://kubernetes.io/) for the container orchestration platform
-- [Kustomize](https://kustomize.io/) for the configuration management tool
-- [Sealed Secrets](https://sealed-secrets.netlify.app/) for secure secret management
-- [Prometheus Operator](https://prometheus-operator.dev/) for monitoring capabilities
 
 ## 📚 Additional Resources
 
@@ -750,4 +733,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**⭐ If this project helped you, please give it a star!**
+
