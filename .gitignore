@@ -1,3 +1,5 @@
 STATUS.md
 VALIDATION_REPORT.md
 netskope-*
+security-check.sh
+security.yaml
