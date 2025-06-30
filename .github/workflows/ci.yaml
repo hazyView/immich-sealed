@@ -173,17 +173,43 @@ jobs:
         sudo apt-get update
         sudo apt-get install trivy
         
-    - name: Scan for secrets in repository
+    - name: Run basic security scan
       run: |
-        echo "🔍 Scanning for potential secrets..."
-        trivy fs --security-checks secret --format table .
+        echo "🔍 Running basic security validation..."
         
-        # Fail if any HIGH or CRITICAL secrets are found
-        if trivy fs --security-checks secret --format json . | jq '.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")' | grep -q .; then
-          echo "❌ HIGH or CRITICAL security issues found!"
-          exit 1
+        # Create temporary directory for scan results
+        mkdir -p /tmp/security-scan
+        
+        # Run Trivy secret scan with proper configuration
+        trivy fs \
+          --security-checks secret \
+          --format json \
+          --output /tmp/security-scan/secrets.json \
+          --quiet \
+          .
+          
+        # Count detected secrets
+        SECRET_COUNT=$(jq -r '[.Results[]?.Secrets[]?] | length' /tmp/security-scan/secrets.json 2>/dev/null || echo "0")
+        
+        if [ "$SECRET_COUNT" -gt 0 ]; then
+          echo "⚠️  Detected $SECRET_COUNT potential secrets"
+          
+          # Show table format for human review
+          trivy fs --security-checks secret --format table --quiet .
+          
+          # Check severity levels
+          HIGH_CRITICAL=$(jq -r '[.Results[]?.Secrets[]? | select(.Severity == "HIGH" or .Severity == "CRITICAL")] | length' /tmp/security-scan/secrets.json 2>/dev/null || echo "0")
+          
+          if [ "$HIGH_CRITICAL" -gt 0 ]; then
+            echo "❌ Found $HIGH_CRITICAL HIGH/CRITICAL severity secrets!"
+            echo "Please review and remediate these findings."
+            exit 1
+          else
+            echo "ℹ️  All detected secrets are low/medium severity"
+          fi
+        else
+          echo "✅ No secrets detected"
         fi
-        echo "✅ No critical secrets found"
         
     - name: Validate security configurations
       run: |

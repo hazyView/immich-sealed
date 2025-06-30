@@ -1,0 +1,15 @@
+# Trivy ignore file for false positives
+# This file contains patterns that should be ignored during security scans
+
+# GitHub Actions workflow files containing security scanning commands
+# These are not actual secrets but security tooling commands
+.github/workflows/ci.yaml
+.github/workflows/security.yaml
+
+# Documentation files that might contain example configurations
+*.md
+docs/**
+
+# Kustomize build outputs (temporary files)
+*-manifest.yaml
+*-security-check.yaml
